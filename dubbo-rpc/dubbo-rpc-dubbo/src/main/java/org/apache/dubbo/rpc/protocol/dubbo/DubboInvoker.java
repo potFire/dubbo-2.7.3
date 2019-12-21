@@ -74,26 +74,41 @@ public class DubboInvoker<T> extends AbstractInvoker<T> {
 
     @Override
     protected Result doInvoke(final Invocation invocation) throws Throwable {
+        // rpc会话域
         RpcInvocation inv = (RpcInvocation) invocation;
+        // 获得方法名
         final String methodName = RpcUtils.getMethodName(invocation);
+        // 把path放入到附加值中
         inv.setAttachment(PATH_KEY, getUrl().getPath());
+        // 把版本号放入到附加值
         inv.setAttachment(VERSION_KEY, version);
 
+        // 获取远程调用的客户端
         ExchangeClient currentClient;
+        // 如果数组内就一个客户端，则直接取出
         if (clients.length == 1) {
             currentClient = clients[0];
         } else {
+            // 取模轮询 从数组中取，当取到最后一个时，从头开始
             currentClient = clients[index.getAndIncrement() % clients.length];
         }
         try {
+            // 是否是单向发送
             boolean isOneway = RpcUtils.isOneway(getUrl(), invocation);
+            // 获得超时时间
             int timeout = getUrl().getMethodPositiveParameter(methodName, TIMEOUT_KEY, DEFAULT_TIMEOUT);
+            // 如果是单向发送
             if (isOneway) {
+                // 是否等待消息发送，默认不等待消息发出，将消息放入 IO 队列，即刻返回。
                 boolean isSent = getUrl().getMethodParameter(methodName, Constants.SENT_KEY, false);
+                // 单向发送只负责发送消息，不等待服务端应答，所以没有返回值
                 currentClient.send(inv, isSent);
+                // 创建一个默认的AsyncRpcResult
                 return AsyncRpcResult.newDefaultAsyncResult(invocation);
             } else {
+                // 否则直接创建AsyncRpcResult
                 AsyncRpcResult asyncRpcResult = new AsyncRpcResult(inv);
+                // 异步调用，返回CompletableFuture类型的future
                 CompletableFuture<Object> responseFuture = currentClient.request(inv, timeout);
                 asyncRpcResult.subscribeTo(responseFuture);
                 // save for 2.6.x compatibility, for example, TraceFilter in Zipkin uses com.alibaba.xxx.FutureAdapter

@@ -128,15 +128,19 @@ public abstract class AbstractInvoker<T> implements Invoker<T> {
     @Override
     public Result invoke(Invocation inv) throws RpcException {
         // if invoker is destroyed due to address refresh from registry, let's allow the current invoke to proceed
+        // 如果服务引用销毁，则打印告警日志，但是通过
         if (destroyed.get()) {
             logger.warn("Invoker for service " + this + " on consumer " + NetUtils.getLocalHost() + " is destroyed, "
                     + ", dubbo version is " + Version.getVersion() + ", this invoker should not be used any longer");
         }
         RpcInvocation invocation = (RpcInvocation) inv;
+        // 会话域中加入该调用链
         invocation.setInvoker(this);
+        // 把附加值放入会话域
         if (CollectionUtils.isNotEmptyMap(attachment)) {
             invocation.addAttachmentsIfAbsent(attachment);
         }
+        // 把上下文的附加值放入会话域
         Map<String, String> contextAttachments = RpcContext.getContext().getAttachments();
         if (CollectionUtils.isNotEmptyMap(contextAttachments)) {
             /**
@@ -148,19 +152,25 @@ public abstract class AbstractInvoker<T> implements Invoker<T> {
             invocation.addAttachments(contextAttachments);
         }
 
+        // 从配置中得到是什么模式的调用，一共有FUTURE、ASYNC和SYNC
         invocation.setInvokeMode(RpcUtils.getInvokeMode(url, invocation));
         RpcUtils.attachInvocationIdIfAsync(getUrl(), invocation);
 
         try {
+            // 执行调用链
             return doInvoke(invocation);
         } catch (InvocationTargetException e) { // biz exception
+            // 获得异常
             Throwable te = e.getTargetException();
             if (te == null) {
+                // 创建默认的异常异步结果
                 return AsyncRpcResult.newDefaultAsyncResult(null, e, invocation);
             } else {
                 if (te instanceof RpcException) {
+                    // 设置异常码
                     ((RpcException) te).setCode(RpcException.BIZ_EXCEPTION);
                 }
+                // 创建默认的异常异步结果
                 return AsyncRpcResult.newDefaultAsyncResult(null, te, invocation);
             }
         } catch (RpcException e) {

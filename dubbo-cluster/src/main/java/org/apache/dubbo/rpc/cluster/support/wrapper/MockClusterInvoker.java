@@ -35,6 +35,11 @@ import java.util.List;
 import static org.apache.dubbo.rpc.cluster.Constants.INVOCATION_NEED_MOCK;
 import static org.apache.dubbo.rpc.Constants.MOCK_KEY;
 
+/**
+ * MockClusterInvoker，降级后的返回策略的实现，
+ * 根据配置的不同来决定不用降级还是强制服务降级还是失败后再服务降级。
+ * @param <T>
+ */
 public class MockClusterInvoker<T> implements Invoker<T> {
 
     private static final Logger logger = LoggerFactory.getLogger(MockClusterInvoker.class);
@@ -72,19 +77,26 @@ public class MockClusterInvoker<T> implements Invoker<T> {
     public Result invoke(Invocation invocation) throws RpcException {
         Result result = null;
 
+        // 获得 "mock" 配置项，有多种配置方式
         String value = directory.getUrl().getMethodParameter(invocation.getMethodName(), MOCK_KEY, Boolean.FALSE.toString()).trim();
+        // 如果没有mock
         if (value.length() == 0 || value.equalsIgnoreCase("false")) {
             //no mock
+            // 直接调用
             result = this.invoker.invoke(invocation);
+            // 如果强制服务降级
         } else if (value.startsWith("force")) {
             if (logger.isWarnEnabled()) {
                 logger.warn("force-mock: " + invocation.getMethodName() + " force-mock enabled , url : " + directory.getUrl());
             }
             //force:direct mock
+            // 直接调用 Mock Invoker ，执行本地 Mock 逻辑
             result = doMockInvoke(invocation, null);
         } else {
             //fail-mock
+            // 失败服务降级
             try {
+                // 正常调用
                 result = this.invoker.invoke(invocation);
             } catch (RpcException e) {
                 if (e.isBiz()) {
@@ -94,6 +106,7 @@ public class MockClusterInvoker<T> implements Invoker<T> {
                 if (logger.isWarnEnabled()) {
                     logger.warn("fail-mock: " + invocation.getMethodName() + " fail-mock enabled , url : " + directory.getUrl(), e);
                 }
+                // 如果调用失败，则服务降级
                 result = doMockInvoke(invocation, e);
             }
         }

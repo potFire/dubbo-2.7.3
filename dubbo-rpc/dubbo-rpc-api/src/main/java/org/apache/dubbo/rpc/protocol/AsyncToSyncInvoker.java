@@ -30,6 +30,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 /**
+ *
+ * 它的作用是把异步结果转化为同步结果
+ *
  * This class will work as a wrapper wrapping outside of each protocol invoker.
  *
  * @param <T>
@@ -52,7 +55,9 @@ public class AsyncToSyncInvoker<T> implements Invoker<T> {
         Result asyncResult = invoker.invoke(invocation);
 
         try {
+            // 如果是同步的调用
             if (InvokeMode.SYNC == ((RpcInvocation) invocation).getInvokeMode()) {
+                // 从异步结果中get结果
                 asyncResult.get(Integer.MAX_VALUE, TimeUnit.MILLISECONDS);
             }
         } catch (InterruptedException e) {

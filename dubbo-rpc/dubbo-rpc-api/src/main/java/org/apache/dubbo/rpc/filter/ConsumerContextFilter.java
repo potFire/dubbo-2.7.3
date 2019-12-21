@@ -29,6 +29,8 @@ import org.apache.dubbo.rpc.RpcInvocation;
 import static org.apache.dubbo.common.constants.CommonConstants.CONSUMER;
 
 /**
+ * 在当前的RpcContext中记录本地调用的一次状态信息
+ *
  * ConsumerContextFilter set current RpcContext with invoker,invocation, local host, remote host and port
  * for consumer invoker.It does it to make the requires info available to execution thread's RpcContext.
  *
@@ -44,19 +46,24 @@ public class ConsumerContextFilter extends ListenableFilter {
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        // 获得上下文，设置invoker，会话域，本地地址和原创地址
         RpcContext.getContext()
                 .setInvoker(invoker)
                 .setInvocation(invocation)
                 .setLocalAddress(NetUtils.getLocalHost(), 0)
                 .setRemoteAddress(invoker.getUrl().getHost(),
                         invoker.getUrl().getPort());
+        // 如果会话域是RpcInvocation，则设置invoker
         if (invocation instanceof RpcInvocation) {
             ((RpcInvocation) invocation).setInvoker(invoker);
         }
         try {
+            // 移除服务端的上下文
             RpcContext.removeServerContext();
+            // 调用下一个过滤器
             return invoker.invoke(invocation);
         } finally {
+            // 清空上下文
             RpcContext.removeContext();
         }
     }
@@ -64,6 +71,7 @@ public class ConsumerContextFilter extends ListenableFilter {
     static class ConsumerContextListener implements Listener {
         @Override
         public void onResponse(Result appResponse, Invoker<?> invoker, Invocation invocation) {
+            // 把结果中的附加值放入到上下文中
             RpcContext.getServerContext().setAttachments(appResponse.getAttachments());
         }
 
