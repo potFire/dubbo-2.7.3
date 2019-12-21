@@ -57,20 +57,28 @@ public class NettyServer extends AbstractServer implements Server {
 
     private static final Logger logger = LoggerFactory.getLogger(NettyServer.class);
     /**
-     * the cache for alive worker channel.
+     * 连接该服务器的通道集合 key为ip:port
      * <ip:port, dubbo channel>
      */
     private Map<String, Channel> channels;
     /**
-     * netty server bootstrap.
+     * 服务器引导类
      */
     private ServerBootstrap bootstrap;
     /**
+     * 通道
+     *
      * the boss channel that receive connections and dispatch these to worker channel.
      */
 	private io.netty.channel.Channel channel;
 
+    /**
+     * boss线程组
+     */
     private EventLoopGroup bossGroup;
+    /**
+     * worker线程组
+     */
     private EventLoopGroup workerGroup;
 
     public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
@@ -86,15 +94,21 @@ public class NettyServer extends AbstractServer implements Server {
      */
     @Override
     protected void doOpen() throws Throwable {
+        // 创建服务引导类
         bootstrap = new ServerBootstrap();
 
+        // 创建boss线程组
         bossGroup = new NioEventLoopGroup(1, new DefaultThreadFactory("NettyServerBoss", true));
+        // 创建worker线程组
         workerGroup = new NioEventLoopGroup(getUrl().getPositiveParameter(IO_THREADS_KEY, Constants.DEFAULT_IO_THREADS),
                 new DefaultThreadFactory("NettyServerWorker", true));
 
+        // 创建服务器处理器
         final NettyServerHandler nettyServerHandler = new NettyServerHandler(getUrl(), this);
+        // 获得通道集合
         channels = nettyServerHandler.getChannels();
 
+        // 设置ventLoopGroup还有可选项
         bootstrap.group(bossGroup, workerGroup)
                 .channel(NioServerSocketChannel.class)
                 .childOption(ChannelOption.TCP_NODELAY, Boolean.TRUE)
@@ -105,7 +119,9 @@ public class NettyServer extends AbstractServer implements Server {
                     protected void initChannel(NioSocketChannel ch) throws Exception {
                         // FIXME: should we use getTimeout()?
                         int idleTimeout = UrlUtils.getIdleTimeout(getUrl());
+                        // 编解码器
                         NettyCodecAdapter adapter = new NettyCodecAdapter(getCodec(), getUrl(), NettyServer.this);
+                        // 增加责任链
                         ch.pipeline()//.addLast("logging",new LoggingHandler(LogLevel.INFO))//for debug
                                 .addLast("decoder", adapter.getDecoder())
                                 .addLast("encoder", adapter.getEncoder())
@@ -113,9 +129,11 @@ public class NettyServer extends AbstractServer implements Server {
                                 .addLast("handler", nettyServerHandler);
                     }
                 });
-        // bind
+        // bind 绑定
         ChannelFuture channelFuture = bootstrap.bind(getBindAddress());
+        // 等待绑定完成
         channelFuture.syncUninterruptibly();
+        // 设置通道
         channel = channelFuture.channel();
 
     }

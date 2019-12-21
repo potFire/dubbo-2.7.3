@@ -60,16 +60,34 @@ public class ZookeeperRegistry extends FailbackRegistry {
 
     private final static Logger logger = LoggerFactory.getLogger(ZookeeperRegistry.class);
 
+    /**
+     * 默认的zookeeper端口
+     */
     private final static int DEFAULT_ZOOKEEPER_PORT = 2181;
 
+    /**
+     * 默认zookeeper根节点
+     */
     private final static String DEFAULT_ROOT = "dubbo";
 
+    /**
+     * zookeeper根节点
+     */
     private final String root;
 
+    /**
+     * 服务接口集合
+     */
     private final Set<String> anyServices = new ConcurrentHashSet<>();
 
+    /**
+     * 监听器集合
+     */
     private final ConcurrentMap<URL, ConcurrentMap<NotifyListener, ChildListener>> zkListeners = new ConcurrentHashMap<>();
 
+    /**
+     * zookeeper客户端实例
+     */
     private final ZookeeperClient zkClient;
 
     public ZookeeperRegistry(URL url, ZookeeperTransporter zookeeperTransporter) {
@@ -77,15 +95,19 @@ public class ZookeeperRegistry extends FailbackRegistry {
         if (url.isAnyHost()) {
             throw new IllegalStateException("registry address == null");
         }
+        // 获得url携带的分组配置，并且作为zookeeper的根节点
         String group = url.getParameter(GROUP_KEY, DEFAULT_ROOT);
         if (!group.startsWith(PATH_SEPARATOR)) {
             group = PATH_SEPARATOR + group;
         }
         this.root = group;
+        // 创建zookeeper client
         zkClient = zookeeperTransporter.connect(url);
+        // 添加状态监听器，当状态为重连的时候调用恢复方法
         zkClient.addStateListener(state -> {
             if (state == StateListener.RECONNECTED) {
                 try {
+                    // 恢复
                     recover();
                 } catch (Exception e) {
                     logger.error(e.getMessage(), e);
@@ -112,6 +134,7 @@ public class ZookeeperRegistry extends FailbackRegistry {
     @Override
     public void doRegister(URL url) {
         try {
+            // 创建URL节点，也就是URL层的节点
             zkClient.create(toUrlPath(url), url.getParameter(DYNAMIC_KEY, true));
         } catch (Throwable e) {
             throw new RpcException("Failed to register " + url + " to zookeeper " + getUrl() + ", cause: " + e.getMessage(), e);

@@ -289,41 +289,62 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         return unexported;
     }
 
+    /**
+     * 检查服务是否应该暴露
+     */
     public void checkAndUpdateSubConfigs() {
         // Use default configs defined explicitly on global configs
+        /**
+         * 用于检测 provider、application 等核心配置类对象是否为空
+         * 若为空，则尝试从其他配置类对象中获取相应的实例
+         */
         completeCompoundConfigs();
         // Config Center should always being started first.
+        // 开启配置中心
         startConfigCenter();
+        // 检测 provider 是否为空，为空则新建一个，并通过系统变量为其初始化
         checkDefault();
+        // 检查protocols是否为空
         checkProtocol();
+        // 检查application是否为空
         checkApplication();
         // if protocol is not injvm checkRegistry
         if (!isOnlyInJvm()) {
+            // 检查注册中心是否为空
             checkRegistry();
         }
         this.refresh();
+        // 核对元数据中心配置是否为空
         checkMetadataReport();
 
+        // 服务接口名不能为空，否则抛出异常
         if (StringUtils.isEmpty(interfaceName)) {
             throw new IllegalStateException("<dubbo:service interface=\"\" /> interface not allow null!");
         }
 
+        // 检测 ref 是否为泛化服务类型
         if (ref instanceof GenericService) {
+            // 设置interfaceClass为GenericService
             interfaceClass = GenericService.class;
             if (StringUtils.isEmpty(generic)) {
+                // 设置generic = true
                 generic = Boolean.TRUE.toString();
             }
         } else {
             try {
+                // 获得接口类型
                 interfaceClass = Class.forName(interfaceName, true, Thread.currentThread()
                         .getContextClassLoader());
             } catch (ClassNotFoundException e) {
                 throw new IllegalStateException(e.getMessage(), e);
             }
+            // 对 interfaceClass，以及 <dubbo:method> 标签中的必要字段进行检查
             checkInterfaceAndMethods(interfaceClass, methods);
+            // 对 ref 合法性进行检测
             checkRef();
             generic = Boolean.FALSE.toString();
         }
+        // stub local一样都是配置本地存根
         if (local != null) {
             if ("true".equals(local)) {
                 local = interfaceName + "Local";
@@ -352,7 +373,9 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 throw new IllegalStateException("The stub implementation class " + stubClass.getName() + " not implement interface " + interfaceName);
             }
         }
+        // 本地存根合法性校验
         checkStubAndLocal(interfaceClass);
+        // mock合法性校验
         checkMock(interfaceClass);
     }
 
@@ -365,16 +388,23 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         return getProtocols().size() == 1 && LOCAL_PROTOCOL.equalsIgnoreCase(getProtocols().get(0).getName());
     }
 
+    /**
+     * 服务端激活发布服务
+     */
     public synchronized void export() {
+        // 检查服务是否应该暴露
         checkAndUpdateSubConfigs();
 
+        // 是否需要导出服务
         if (!shouldExport()) {
             return;
         }
 
+        // 师傅需要延迟发布
         if (shouldDelay()) {
             DELAY_EXPORT_EXECUTOR.schedule(this::doExport, getDelay(), TimeUnit.MILLISECONDS);
         } else {
+            // 直接发布
             doExport();
         }
     }
@@ -390,6 +420,10 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         return (export == null && provider != null) ? provider.getExport() : export;
     }
 
+    /**
+     * 检查是否设置了延迟发布的时间
+     * @return
+     */
     private boolean shouldDelay() {
         Integer delay = getDelay();
         return delay != null && delay > 0;
@@ -401,17 +435,22 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
     }
 
     protected synchronized void doExport() {
+        // 如果调用不暴露的方法，则unexported值为true
         if (unexported) {
             throw new IllegalStateException("The service " + interfaceClass.getName() + " has already unexported!");
         }
+        // 如果服务已经暴露了，则直接结束
         if (exported) {
             return;
         }
+        // 设置已经暴露
         exported = true;
 
+        // 如果path为空，则赋值接口名称
         if (StringUtils.isEmpty(path)) {
             path = interfaceName;
         }
+        // 多协议多注册中心暴露服务
         doExportUrls();
     }
 
@@ -449,25 +488,39 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doExportUrls() {
+        // 加载配置的所有的服务注册中心
         List<URL> registryURLs = loadRegistries(true);
+        // 遍历 protocols，并在每个协议下暴露服务
         for (ProtocolConfig protocolConfig : protocols) {
+            // 以path、group、version来作为服务唯一性确定的key
             String pathKey = URL.buildKey(getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), group, version);
             ProviderModel providerModel = new ProviderModel(pathKey, ref, interfaceClass);
             ApplicationModel.initProviderModel(pathKey, providerModel);
+            // 组装 URL
             doExportUrlsFor1Protocol(protocolConfig, registryURLs);
         }
     }
 
+    /**
+     * 将参数封装为 URL ，然后具体执行服务导出
+     * @param protocolConfig 参数
+     * @param registryURLs 注册中心 URL
+     */
     private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> registryURLs) {
+        // 获取协议名
         String name = protocolConfig.getName();
+        // 如果为空，则是默认的dubbo
         if (StringUtils.isEmpty(name)) {
             name = DUBBO;
         }
 
         Map<String, String> map = new HashMap<String, String>();
+        // 设置服务提供者册
         map.put(SIDE_KEY, PROVIDER_SIDE);
 
+        // 添加 协议版本、发布版本，时间戳 等信息到 map 中
         appendRuntimeParameters(map);
+        // 添加metrics、application、module、provider、protocol的所有信息到map
         appendParameters(map, metrics);
         appendParameters(map, application);
         appendParameters(map, module);
@@ -476,41 +529,61 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         appendParameters(map, provider);
         appendParameters(map, protocolConfig);
         appendParameters(map, this);
+        // 如果method的配置列表不为空
         if (CollectionUtils.isNotEmpty(methods)) {
+            // 遍历method配置列表
             for (MethodConfig method : methods) {
                 appendParameters(map, method, method.getName());
+                // 添加 MethodConfig 对象的字段信息到 map 中，键 = 方法名.属性名。
+                // 比如存储 <dubbo:method name="sayHello" retries="2"> 对应的 MethodConfig，
+                // 键 = sayHello.retries，map = {"sayHello.retries": 2, "xxx": "yyy"}
                 String retryKey = method.getName() + ".retry";
                 if (map.containsKey(retryKey)) {
                     String retryValue = map.remove(retryKey);
+                    // 如果retryValue为false，则不重试，设置值为0
                     if ("false".equals(retryValue)) {
                         map.put(method.getName() + ".retries", "0");
                     }
                 }
+                // 获得ArgumentConfig列表
                 List<ArgumentConfig> arguments = method.getArguments();
                 if (CollectionUtils.isNotEmpty(arguments)) {
+                    // 遍历ArgumentConfig列表
                     for (ArgumentConfig argument : arguments) {
                         // convert argument type
+                        // 检测 type 属性是否为空，或者空串
                         if (argument.getType() != null && argument.getType().length() > 0) {
+                            // 利用反射获取该服务的所有方法集合
                             Method[] methods = interfaceClass.getMethods();
                             // visit all methods
                             if (methods != null && methods.length > 0) {
+                                // 遍历所有方法
                                 for (int i = 0; i < methods.length; i++) {
+                                    // 获得方法名
                                     String methodName = methods[i].getName();
                                     // target the method, and get its signature
+                                    // 找到目标方法
                                     if (methodName.equals(method.getName())) {
+                                        // 通过反射获取目标方法的参数类型数组 argtypes
                                         Class<?>[] argtypes = methods[i].getParameterTypes();
                                         // one callback in the method
+                                        // 如果下标为-1
                                         if (argument.getIndex() != -1) {
+                                            // 检测 argType 的名称与 ArgumentConfig 中的 type 属性是否一致
                                             if (argtypes[argument.getIndex()].getName().equals(argument.getType())) {
+                                                //  添加 ArgumentConfig 字段信息到 map 中
                                                 appendParameters(map, argument, method.getName() + "." + argument.getIndex());
                                             } else {
+                                                // 不一致，则抛出异常
                                                 throw new IllegalArgumentException("Argument config error : the index attribute and type attribute not match :index :" + argument.getIndex() + ", type:" + argument.getType());
                                             }
                                         } else {
                                             // multiple callbacks in the method
+                                            // 遍历参数类型数组 argtypes，查找 argument.type 类型的参数
                                             for (int j = 0; j < argtypes.length; j++) {
                                                 Class<?> argclazz = argtypes[j];
                                                 if (argclazz.getName().equals(argument.getType())) {
+                                                    // 如果找到，则添加 ArgumentConfig 字段信息到 map 中
                                                     appendParameters(map, argument, method.getName() + "." + j);
                                                     if (argument.getIndex() != -1 && argument.getIndex() != j) {
                                                         throw new IllegalArgumentException("Argument config error : the index attribute and type attribute not match :index :" + argument.getIndex() + ", type:" + argument.getType());
@@ -522,8 +595,10 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                                 }
                             }
                         } else if (argument.getIndex() != -1) {
+                            // 用户未配置 type 属性，但配置了 index 属性，且 index != -1，则直接添加到map
                             appendParameters(map, argument, method.getName() + "." + argument.getIndex());
                         } else {
+                            // 抛出异常
                             throw new IllegalArgumentException("Argument config must set index or type attribute.eg: <dubbo:argument index='0' .../> or <dubbo:argument type=xxx .../>");
                         }
 
@@ -532,23 +607,31 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
             } // end of methods for
         }
 
+        // 如果为泛型调用，设置泛型类型
         if (ProtocolUtils.isGeneric(generic)) {
             map.put(GENERIC_KEY, generic);
             map.put(METHODS_KEY, ANY_VALUE);
         } else {
+            // 获得版本号
             String revision = Version.getVersion(interfaceClass, version);
+            // 放入map
             if (revision != null && revision.length() > 0) {
                 map.put(REVISION_KEY, revision);
             }
 
+            // 获得方法集合
             String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
+            // 如果为空，则告警
             if (methods.length == 0) {
                 logger.warn("No method found in service interface " + interfaceClass.getName());
+                // 设置method为*
                 map.put(METHODS_KEY, ANY_VALUE);
             } else {
+                // 否则加入方法集合
                 map.put(METHODS_KEY, StringUtils.join(new HashSet<String>(Arrays.asList(methods)), ","));
             }
         }
+        // 把token 的值加入到map中
         if (!ConfigUtils.isEmpty(token)) {
             if (ConfigUtils.isDefault(token)) {
                 map.put(TOKEN_KEY, UUID.randomUUID().toString());
@@ -556,39 +639,53 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 map.put(TOKEN_KEY, token);
             }
         }
-        // export service
+        // 拼接 URL 对象
+        // 获得地址
         String host = this.findConfigedHosts(protocolConfig, registryURLs, map);
+        // 获得端口号
         Integer port = this.findConfigedPorts(protocolConfig, name, map);
+        // 生成　URL
         URL url = new URL(name, host, port, getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), map);
 
+        // 加载 ConfiguratorFactory，并生成 Configurator 实例，判断是否有该协议的实现存在
         if (ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
                 .hasExtension(url.getProtocol())) {
+            // 通过实例配置 url
             url = ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
                     .getExtension(url.getProtocol()).getConfigurator(url).configure(url);
         }
 
+        // 导出服务：本地服务、远程服务
         String scope = url.getParameter(SCOPE_KEY);
         // don't export when none is configured
+        // 如果 scope 为 SCOPE_NONE 则不导出服务
         if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
 
             // export to local if the config is not remote (export to remote only when config is remote)
+            // 如果 scope 不是 SCOPE_REMOTE 则导出本地服务
             if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
+                // 暴露到本地
                 exportLocal(url);
             }
             // export to remote if the config is not local (export to local only when config is local)
+            // 如果 scope 不是 SCOPE_LOCAL 则导出远程服务
             if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
                 if (!isOnlyInJvm() && logger.isInfoEnabled()) {
                     logger.info("Export dubbo service " + interfaceClass.getName() + " to url " + url);
                 }
+                // 如果有服务注册中心地址
                 if (CollectionUtils.isNotEmpty(registryURLs)) {
+                    // 遍历注册中心
                     for (URL registryURL : registryURLs) {
                         //if protocol is only injvm ,not register
                         if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {
                             continue;
                         }
+                        // 添加dynamic配置
                         url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY));
                         URL monitorUrl = loadMonitor(registryURL);
                         if (monitorUrl != null) {
+                            // 添加监视器配置
                             url = url.addParameterAndEncoded(MONITOR_KEY, monitorUrl.toFullString());
                         }
                         if (logger.isInfoEnabled()) {
@@ -596,18 +693,26 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                         }
 
                         // For providers, this is used to enable custom proxy to generate invoker
+                        // 获得代理方式
                         String proxy = url.getParameter(PROXY_KEY);
                         if (StringUtils.isNotEmpty(proxy)) {
+                            // 添加代理方式到注册中心到url
                             registryURL = registryURL.addParameter(PROXY_KEY, proxy);
                         }
 
+                        // 默认调用 JavassistProxyFactory.getInvoker
+                        // 为服务提供类(ref)生成 Invoker
                         Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
+                        // DelegateProviderMetaDataInvoker 用于持有 Invoker 和 ServiceConfig
                         DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
+                        // 暴露服务，并且生成Exporter，调用 RegistryProtocol
                         Exporter<?> exporter = protocol.export(wrapperInvoker);
+                        // 加入到暴露者集合中
                         exporters.add(exporter);
                     }
                 } else {
+                    // 不存在注册中心，则仅仅暴露服务，不会记录暴露到地址
                     Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, url);
                     DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
@@ -615,10 +720,13 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                     exporters.add(exporter);
                 }
                 /**
+                 * 元数据存储
+                 *
                  * @since 2.7.0
                  * ServiceData Store
                  */
                 MetadataReportService metadataReportService = null;
+                // 如果元数据中心服务不为空，则发布该服务，也就是在元数据中心记录url中到部分配置
                 if ((metadataReportService = getMetadataReportService()) != null) {
                     metadataReportService.publishProvider(url);
                 }
@@ -629,16 +737,22 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     /**
+     * injvm 是一个伪协议，它不开启端口，不发起远程调用，只在 jvm 内直接关联，
+     * 但执行 Dubbo 的 Filter 链
      * always export injvm
      */
     private void exportLocal(URL url) {
+        // 生成本地的url,分别把协议改为injvm，设置host和port
         URL local = URLBuilder.from(url)
                 .setProtocol(LOCAL_PROTOCOL)
                 .setHost(LOCALHOST_VALUE)
                 .setPort(0)
                 .build();
+        // InjvmProtocol
+        // 通过代理工程创建invoker，再调用export方法进行暴露服务，生成Exporter
         Exporter<?> exporter = protocol.export(
                 PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, local));
+        // 把生成的暴露者加入集合
         exporters.add(exporter);
         logger.info("Export dubbo service " + interfaceClass.getName() + " to local registry url : " + local);
     }

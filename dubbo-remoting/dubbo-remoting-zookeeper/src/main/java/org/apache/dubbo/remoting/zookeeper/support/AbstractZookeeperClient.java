@@ -56,18 +56,25 @@ public abstract class AbstractZookeeperClient<TargetDataListener, TargetChildLis
 
     @Override
     public void create(String path, boolean ephemeral) {
+        // 如果不是临时节点
         if (!ephemeral) {
+            // 判断该客户端是否存在
             if (checkExists(path)) {
                 return;
             }
         }
+        // 获得/的位置
         int i = path.lastIndexOf('/');
         if (i > 0) {
+            // 创建客户端
             create(path.substring(0, i), false);
         }
+        // 如果是临时节点
         if (ephemeral) {
+            // 创建临时节点
             createEphemeral(path);
         } else {
+            // 递归创建节点
             createPersistent(path);
         }
     }
