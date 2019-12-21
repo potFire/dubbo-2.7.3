@@ -24,6 +24,9 @@ import org.apache.dubbo.remoting.Endpoint;
 import org.apache.dubbo.remoting.RemotingException;
 
 /**
+ * AbstractPeer类就做了装饰模式中装饰角色，
+ * 只是维护了通道的正在关闭和关闭完成两个状态
+ *
  * AbstractPeer
  */
 public abstract class AbstractPeer implements Endpoint, ChannelHandler {
@@ -141,9 +144,11 @@ public abstract class AbstractPeer implements Endpoint, ChannelHandler {
 
     @Override
     public void received(Channel ch, Object msg) throws RemotingException {
+        // 如果通道已经关闭，则直接返回
         if (closed) {
             return;
         }
+        // MultiMessageHandler的received
         handler.received(ch, msg);
     }
 

@@ -57,7 +57,9 @@ public class ContextFilter extends ListenableFilter {
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        // 获得会话域的附加值
         Map<String, String> attachments = invocation.getAttachments();
+        // 删除异步属性以避免传递给以下调用链
         if (attachments != null) {
             attachments = new HashMap<>(attachments);
             attachments.remove(PATH_KEY);
@@ -72,6 +74,7 @@ public class ContextFilter extends ListenableFilter {
             attachments.remove(TAG_KEY);
             attachments.remove(FORCE_USE_TAG);
         }
+        // 在rpc上下文添加上一个调用链的信息
         RpcContext.getContext()
                 .setInvoker(invoker)
                 .setInvocation(invocation)
@@ -82,6 +85,7 @@ public class ContextFilter extends ListenableFilter {
         // merged from dubbox
         // we may already added some attachments into RpcContext before this filter (e.g. in rest protocol)
         if (attachments != null) {
+            // 把会话域中的附加值全部加入RpcContext中
             if (RpcContext.getContext().getAttachments() != null) {
                 RpcContext.getContext().getAttachments().putAll(attachments);
             } else {
@@ -89,10 +93,12 @@ public class ContextFilter extends ListenableFilter {
             }
         }
 
+        // 如果会话域属于rpc的会话域，则设置实体域
         if (invocation instanceof RpcInvocation) {
             ((RpcInvocation) invocation).setInvoker(invoker);
         }
         try {
+            // 调用下一个调用链
             return invoker.invoke(invocation);
         } finally {
             // IMPORTANT! For async scenario, we must remove context from current thread, so we always create a new RpcContext for the next invoke for the same thread.

@@ -154,26 +154,34 @@ public class ProtocolFilterWrapper implements Protocol {
 
         @Override
         public Result invoke(Invocation invocation) throws RpcException {
+            // 调用拦截器链的invoke，ProtocolFilterWrapper的buildInvokerChain方法中的invoker实例的invoke方法
             Result asyncResult = filterInvoker.invoke(invocation);
 
+            // 把异步返回的结果加入到上下文中
             asyncResult = asyncResult.whenCompleteWithContext((r, t) -> {
+                // 循环各个过滤器
                 for (int i = filters.size() - 1; i >= 0; i--) {
                     Filter filter = filters.get(i);
                     // onResponse callback
+                    // 如果该过滤器是ListenableFilter类型的
                     if (filter instanceof ListenableFilter) {
+                        // 强制类型转化
                         Filter.Listener listener = ((ListenableFilter) filter).listener();
                         if (listener != null) {
                             if (t == null) {
+                                // 如果内部类listener不为空，则调用回调方法onResponse
                                 listener.onResponse(r, filterInvoker, invocation);
                             } else {
                                 listener.onError(t, filterInvoker, invocation);
                             }
                         }
                     } else {
+                        // 否则，直接调用filter的onResponse，做兼容。
                         filter.onResponse(r, filterInvoker, invocation);
                     }
                 }
             });
+            // 返回异步结果
             return asyncResult;
         }
 

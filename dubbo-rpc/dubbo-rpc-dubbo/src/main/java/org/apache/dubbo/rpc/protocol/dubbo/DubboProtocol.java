@@ -148,6 +148,7 @@ public class DubboProtocol extends AbstractProtocol {
                         + ", channel: consumer: " + channel.getRemoteAddress() + " --> provider: " + channel.getLocalAddress());
             }
 
+            //强制类型转化
             Invocation inv = (Invocation) message;
             // 获得暴露的invoker
             Invoker<?> invoker = getInvoker(channel, inv);
@@ -181,7 +182,7 @@ public class DubboProtocol extends AbstractProtocol {
             }
             // 设置远程地址
             RpcContext.getContext().setRemoteAddress(channel.getRemoteAddress());
-            // 调用下一个调用链
+            // 调用下一个调用链，ProtocolFilterWrapper的CallbackRegistrationInvoker的invoke
             Result result = invoker.invoke(inv);
             return result.completionFuture().thenApply(Function.identity());
         }

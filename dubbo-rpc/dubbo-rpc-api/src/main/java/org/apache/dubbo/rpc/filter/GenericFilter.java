@@ -61,32 +61,42 @@ public class GenericFilter extends ListenableFilter {
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation inv) throws RpcException {
+        // 如果是泛化调用
         if ((inv.getMethodName().equals($INVOKE) || inv.getMethodName().equals($INVOKE_ASYNC))
                 && inv.getArguments() != null
                 && inv.getArguments().length == 3
                 && !GenericService.class.isAssignableFrom(invoker.getInterface())) {
+            // 获得请求名字
             String name = ((String) inv.getArguments()[0]).trim();
+            // 获得请求参数类型
             String[] types = (String[]) inv.getArguments()[1];
+            // 获得请求参数
             Object[] args = (Object[]) inv.getArguments()[2];
             try {
+                // 获得方法
                 Method method = ReflectUtils.findMethodByMethodSignature(invoker.getInterface(), name, types);
+                // 获得该方法的参数类型
                 Class<?>[] params = method.getParameterTypes();
                 if (args == null) {
                     args = new Object[params.length];
                 }
+                // 获得附加值
                 String generic = inv.getAttachment(GENERIC_KEY);
 
                 if (StringUtils.isBlank(generic)) {
                     generic = RpcContext.getContext().getAttachment(GENERIC_KEY);
                 }
 
+                // 如果附加值为空，在用上下文携带的附加值
                 if (StringUtils.isEmpty(generic)
                         || ProtocolUtils.isDefaultGenericSerialization(generic)) {
+                    // 直接进行类型转化
                     args = PojoUtils.realize(args, params, method.getGenericParameterTypes());
                 } else if (ProtocolUtils.isJavaGenericSerialization(generic)) {
                     for (int i = 0; i < args.length; i++) {
                         if (byte[].class == args[i].getClass()) {
                             try (UnsafeByteArrayInputStream is = new UnsafeByteArrayInputStream((byte[]) args[i])) {
+                                // 使用nativejava方式反序列化
                                 args[i] = ExtensionLoader.getExtensionLoader(Serialization.class)
                                         .getExtension(GENERIC_SERIALIZATION_NATIVE_JAVA)
                                         .deserialize(null, is).readObject();
@@ -106,6 +116,7 @@ public class GenericFilter extends ListenableFilter {
                 } else if (ProtocolUtils.isBeanGenericSerialization(generic)) {
                     for (int i = 0; i < args.length; i++) {
                         if (args[i] instanceof JavaBeanDescriptor) {
+                            // 用JavaBean方式反序列化
                             args[i] = JavaBeanSerializeUtil.deserialize((JavaBeanDescriptor) args[i]);
                         } else {
                             throw new RpcException(
@@ -122,6 +133,7 @@ public class GenericFilter extends ListenableFilter {
                     if (args.length == 1 && args[0] instanceof String) {
                         try (UnsafeByteArrayInputStream is =
                                      new UnsafeByteArrayInputStream(((String) args[0]).getBytes())) {
+                            // 用protobuf-json进行反序列化
                             args[0] = ExtensionLoader.getExtensionLoader(Serialization.class)
                                     .getExtension("" + GENERIC_SERIALIZATION_PROTOBUF)
                                     .deserialize(null, is).readObject(method.getParameterTypes()[0]);

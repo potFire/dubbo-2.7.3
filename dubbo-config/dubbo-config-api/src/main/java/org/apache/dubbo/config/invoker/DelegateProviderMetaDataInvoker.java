@@ -24,6 +24,7 @@ import org.apache.dubbo.rpc.Result;
 import org.apache.dubbo.rpc.RpcException;
 
 /**
+ * 该类也是用了装饰模式，不过该类是invoker和配置中心的适配类，其中也没有进行实际的功能增强
  *
  * A Invoker wrapper that wrap the invoker and all the metadata (ServiceConfig)
  */

@@ -40,6 +40,8 @@ import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_TIMEOUT;
 import static org.apache.dubbo.common.constants.CommonConstants.TIMEOUT_KEY;
 
 /**
+ * 该类实现了ResponseFuture接口，其中封装了处理响应的逻辑
+ *
  * DefaultFuture.
  */
 public class DefaultFuture extends CompletableFuture<Object> {
@@ -143,13 +145,17 @@ public class DefaultFuture extends CompletableFuture<Object> {
 
     public static void received(Channel channel, Response response, boolean timeout) {
         try {
+            // future集合中移除该请求的future，（响应id和请求id一一对应的）
             DefaultFuture future = FUTURES.remove(response.getId());
             if (future != null) {
+                //获得超时
                 Timeout t = future.timeoutCheckTask;
+                // 如果没有超时，则取消timeoutCheckTask
                 if (!timeout) {
                     // decrease Time
                     t.cancel();
                 }
+                // 接收响应结果
                 future.doReceived(response);
             } else {
                 logger.warn("The timeout response finally returned at "
@@ -159,6 +165,7 @@ public class DefaultFuture extends CompletableFuture<Object> {
                         + " -> " + channel.getRemoteAddress()));
             }
         } finally {
+            // 通道集合移除该请求对应的通道，代表着这一次请求结束
             CHANNELS.remove(response.getId());
         }
     }
@@ -180,14 +187,19 @@ public class DefaultFuture extends CompletableFuture<Object> {
 
 
     private void doReceived(Response res) {
+        // 如果结果为空，则抛出异常
         if (res == null) {
             throw new IllegalStateException("response cannot be null");
         }
+        // 如果结果的状态码为ok
         if (res.getStatus() == Response.OK) {
+            // 则future调用完成
             this.complete(res.getResult());
         } else if (res.getStatus() == Response.CLIENT_TIMEOUT || res.getStatus() == Response.SERVER_TIMEOUT) {
+            // 如果超时，则返回一个超时异常
             this.completeExceptionally(new TimeoutException(res.getStatus() == Response.SERVER_TIMEOUT, channel, res.getErrorMessage()));
         } else {
+            // 否则返回一个RemotingException
             this.completeExceptionally(new RemotingException(channel, res.getErrorMessage()));
         }
     }

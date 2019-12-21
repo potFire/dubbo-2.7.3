@@ -34,12 +34,16 @@ public class MultiMessageHandler extends AbstractChannelHandlerDelegate {
     @SuppressWarnings("unchecked")
     @Override
     public void received(Channel channel, Object message) throws RemotingException {
+        // 如果消息是MultiMessage类型的，也就是多消息类型
         if (message instanceof MultiMessage) {
+            // 强制转化为MultiMessage
             MultiMessage list = (MultiMessage) message;
+            // 把各个消息进行发送，HeartbeatHandler的received
             for (Object obj : list) {
                 handler.received(channel, obj);
             }
         } else {
+            // 直接发送，HeartbeatHandler的received
             handler.received(channel, message);
         }
     }

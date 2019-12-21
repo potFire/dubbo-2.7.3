@@ -81,20 +81,29 @@ public abstract class AbstractProxyInvoker<T> implements Invoker<T> {
     @Override
     public Result invoke(Invocation invocation) throws RpcException {
         try {
+            // 执行下一步
             Object value = doInvoke(proxy, invocation.getMethodName(), invocation.getParameterTypes(), invocation.getArguments());
+            // 把返回结果用CompletableFuture包裹
             CompletableFuture<Object> future = wrapWithFuture(value, invocation);
+            // 创建AsyncRpcResult实例
             AsyncRpcResult asyncRpcResult = new AsyncRpcResult(invocation);
             future.whenComplete((obj, t) -> {
                 AppResponse result = new AppResponse();
+                // 如果抛出异常
                 if (t != null) {
+                    // 属于CompletionException异常
                     if (t instanceof CompletionException) {
+                        // 设置异常信息
                         result.setException(t.getCause());
                     } else {
+                        // 直接设置异常
                         result.setException(t);
                     }
                 } else {
+                    // 如果没有异常，则把结果放入异步结果内
                     result.setValue(obj);
                 }
+                // 完成
                 asyncRpcResult.complete(result);
             });
             return asyncRpcResult;

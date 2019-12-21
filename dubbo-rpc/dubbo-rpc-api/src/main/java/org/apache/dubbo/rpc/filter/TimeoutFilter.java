@@ -29,6 +29,8 @@ import org.apache.dubbo.rpc.RpcException;
 import java.util.Arrays;
 
 /**
+ * 该过滤器是当服务调用超时的时候，记录告警日志。
+ *
  * Log any invocation timeout, but don't stop server from running
  */
 @Activate(group = CommonConstants.PROVIDER)
@@ -44,7 +46,9 @@ public class TimeoutFilter extends ListenableFilter {
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        // 设置开始时间
         invocation.setAttachment(TIMEOUT_FILTER_START_TIME, String.valueOf(System.currentTimeMillis()));
+        // 调用下一个调用链
         return invoker.invoke(invocation);
     }
 
@@ -52,9 +56,12 @@ public class TimeoutFilter extends ListenableFilter {
 
         @Override
         public void onResponse(Result appResponse, Invoker<?> invoker, Invocation invocation) {
+            // 获得开始时间
             String startAttach = invocation.getAttachment(TIMEOUT_FILTER_START_TIME);
             if (startAttach != null) {
+                // 获得调用使用的时间
                 long elapsed = System.currentTimeMillis() - Long.valueOf(startAttach);
+                // 如果服务调用超时，则打印告警日志
                 if (invoker.getUrl() != null && elapsed > invoker.getUrl().getMethodParameter(invocation.getMethodName(), "timeout", Integer.MAX_VALUE)) {
                     if (logger.isWarnEnabled()) {
                         logger.warn("invoke time out. method: " + invocation.getMethodName() + " arguments: " + Arrays.toString(invocation.getArguments()) + " , url is " + invoker.getUrl() + ", invoke elapsed " + elapsed + " ms.");
