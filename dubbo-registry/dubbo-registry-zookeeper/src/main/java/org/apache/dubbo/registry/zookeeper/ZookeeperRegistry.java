@@ -53,6 +53,9 @@ import static org.apache.dubbo.common.constants.RegistryConstants.PROVIDERS_CATE
 import static org.apache.dubbo.common.constants.RegistryConstants.ROUTERS_CATEGORY;
 
 /**
+ * 该类就是针对注册中心核心的功能注册、订阅、
+ * 取消注册、取消订阅，查询注册列表进行展开，基于zookeeper来实现。
+ *
  * ZookeeperRegistry
  *
  */
@@ -144,6 +147,7 @@ public class ZookeeperRegistry extends FailbackRegistry {
     @Override
     public void doUnregister(URL url) {
         try {
+            // 删除节点
             zkClient.delete(toUrlPath(url));
         } catch (Throwable e) {
             throw new RpcException("Failed to unregister " + url + " to zookeeper " + getUrl() + ", cause: " + e.getMessage(), e);
@@ -153,17 +157,25 @@ public class ZookeeperRegistry extends FailbackRegistry {
     @Override
     public void doSubscribe(final URL url, final NotifyListener listener) {
         try {
+            // 处理所有Service层发起的订阅，例如监控中心的订阅
             if (ANY_VALUE.equals(url.getServiceInterface())) {
+                // 获得根目录
                 String root = toRootPath();
+                // 获得url对应的监听器集合
                 ConcurrentMap<NotifyListener, ChildListener> listeners = zkListeners.get(url);
+                // 不存在就创建监听器集合
                 if (listeners == null) {
                     zkListeners.putIfAbsent(url, new ConcurrentHashMap<>());
                     listeners = zkListeners.get(url);
                 }
+                // 获得节点监听器
                 ChildListener zkListener = listeners.get(listener);
+                // 如果该节点监听器为空，则创建
                 if (zkListener == null) {
                     listeners.putIfAbsent(listener, (parentPath, currentChilds) -> {
+                        // 遍历现有的节点，如果现有的服务集合中没有该节点，则加入该节点，然后订阅该节点
                         for (String child : currentChilds) {
+                            // 解码
                             child = URL.decode(child);
                             if (!anyServices.contains(child)) {
                                 anyServices.add(child);
@@ -172,37 +184,52 @@ public class ZookeeperRegistry extends FailbackRegistry {
                             }
                         }
                     });
+                    // 重新获取，为了保证一致性
                     zkListener = listeners.get(listener);
                 }
+                // 创建service节点，该节点为持久节点
                 zkClient.create(root, false);
+                // 向zookeeper的service节点发起订阅，获得Service接口全名数组
                 List<String> services = zkClient.addChildListener(root, zkListener);
                 if (CollectionUtils.isNotEmpty(services)) {
+                    // 遍历Service接口全名数组
                     for (String service : services) {
                         service = URL.decode(service);
                         anyServices.add(service);
+                        // 发起该service层的订阅
                         subscribe(url.setPath(service).addParameters(INTERFACE_KEY, service,
                                 Constants.CHECK_KEY, String.valueOf(false)), listener);
                     }
                 }
             } else {
+                // 处理指定 Service 层的发起订阅，例如服务消费者的订阅
                 List<URL> urls = new ArrayList<>();
+                // 遍历分类数组
                 for (String path : toCategoriesPath(url)) {
+                    // 获得监听器集合
                     ConcurrentMap<NotifyListener, ChildListener> listeners = zkListeners.get(url);
+                    // 如果没有则创建
                     if (listeners == null) {
                         zkListeners.putIfAbsent(url, new ConcurrentHashMap<>());
                         listeners = zkListeners.get(url);
                     }
+                    // 获得节点监听器
                     ChildListener zkListener = listeners.get(listener);
                     if (zkListener == null) {
                         listeners.putIfAbsent(listener, (parentPath, currentChilds) -> ZookeeperRegistry.this.notify(url, listener, toUrlsWithEmpty(url, parentPath, currentChilds)));
+                        // 重新获取节点监听器，保证一致性
                         zkListener = listeners.get(listener);
                     }
+                    // 创建type节点，该节点为持久节点
                     zkClient.create(path, false);
+                    // 向zookeeper的type节点发起订阅
                     List<String> children = zkClient.addChildListener(path, zkListener);
                     if (children != null) {
+                        // 加入到自子节点数据数组
                         urls.addAll(toUrlsWithEmpty(url, path, children));
                     }
                 }
+                // 通知数据变化
                 notify(url, listener, urls);
             }
         } catch (Throwable e) {

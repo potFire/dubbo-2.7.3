@@ -91,6 +91,7 @@ public abstract class AbstractClient extends AbstractEndpoint implements Client 
                 .getDefaultExtension().remove(CONSUMER_SIDE, Integer.toString(url.getPort()));
     }
 
+    // 加载线程池模型
     protected static ChannelHandler wrapChannelHandler(URL url, ChannelHandler handler) {
         url = ExecutorUtil.setThreadName(url, CLIENT_THREAD_POOL_NAME);
         url = url.addParameterIfAbsent(THREADPOOL_KEY, DEFAULT_CLIENT_THREADPOOL);
