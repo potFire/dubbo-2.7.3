@@ -29,6 +29,10 @@ import java.util.Collections;
 import java.util.List;
 
 /**
+ * 当消费者使用了多注册中心时，其把所有的注册中心的 invoker 列表
+ * 汇集到一个 invoker 列表中。也就是说，将传入的 invokers 集合，
+ * 封装成静态的 Directory 对象
+ *
  * StaticDirectory
  */
 public class StaticDirectory<T> extends AbstractDirectory<T> {
@@ -66,6 +70,7 @@ public class StaticDirectory<T> extends AbstractDirectory<T> {
         if (isDestroyed()) {
             return false;
         }
+        // 遍历invokers，如果有一个可用，则可用
         for (Invoker<T> invoker : invokers) {
             if (invoker.isAvailable()) {
                 return true;
@@ -80,9 +85,11 @@ public class StaticDirectory<T> extends AbstractDirectory<T> {
             return;
         }
         super.destroy();
+        // 遍历invokers，销毁所有的invoker
         for (Invoker<T> invoker : invokers) {
             invoker.destroy();
         }
+        // 清除集合
         invokers.clear();
     }
 

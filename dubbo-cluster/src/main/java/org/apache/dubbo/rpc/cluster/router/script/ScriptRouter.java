@@ -47,17 +47,26 @@ import static org.apache.dubbo.rpc.cluster.Constants.RUNTIME_KEY;
 import static org.apache.dubbo.rpc.cluster.Constants.TYPE_KEY;
 
 /**
- * ScriptRouter
+ * ScriptRouter  根据路由规则选择invoker的实现逻辑
  */
 public class ScriptRouter extends AbstractRouter {
     public static final String NAME = "SCRIPT_ROUTER";
     private static final int SCRIPT_ROUTER_DEFAULT_PRIORITY = 0;
     private static final Logger logger = LoggerFactory.getLogger(ScriptRouter.class);
 
+    /**
+     * 脚本类型 与 ScriptEngine 的映射缓存
+     */
     private static final Map<String, ScriptEngine> engines = new ConcurrentHashMap<>();
 
+    /**
+     * 脚本
+     */
     private final ScriptEngine engine;
 
+    /**
+     * 路由规则
+     */
     private final String rule;
 
     private CompiledScript function;
@@ -108,6 +117,7 @@ public class ScriptRouter extends AbstractRouter {
     @Override
     public <T> List<Invoker<T>> route(List<Invoker<T>> invokers, URL url, Invocation invocation) throws RpcException {
         try {
+            // 创建脚本
             Bindings bindings = createBindings(invokers, invocation);
             if (function == null) {
                 return invokers;
@@ -125,6 +135,7 @@ public class ScriptRouter extends AbstractRouter {
      */
     @SuppressWarnings("unchecked")
     protected <T> List<Invoker<T>> getRoutedInvokers(Object obj) {
+        // 根据结果类型，转换成 (List<Invoker<T>> 类型返回
         if (obj instanceof Invoker[]) {
             return Arrays.asList((Invoker<T>[]) obj);
         } else if (obj instanceof Object[]) {
@@ -140,6 +151,7 @@ public class ScriptRouter extends AbstractRouter {
     private <T> Bindings createBindings(List<Invoker<T>> invokers, Invocation invocation) {
         Bindings bindings = engine.createBindings();
         // create a new List of invokers
+        // 设置invokers、invocation、context
         bindings.put("invokers", new ArrayList<>(invokers));
         bindings.put("invocation", invocation);
         bindings.put("context", RpcContext.getContext());

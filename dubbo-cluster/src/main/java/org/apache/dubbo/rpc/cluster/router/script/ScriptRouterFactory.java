@@ -21,7 +21,7 @@ import org.apache.dubbo.rpc.cluster.Router;
 import org.apache.dubbo.rpc.cluster.RouterFactory;
 
 /**
- * ScriptRouterFactory
+ * ScriptRouterFactory 基于脚本的路由规则工厂类。
  * <p>
  * Example URLS used by Script Router Factory：
  * <ol>

@@ -218,6 +218,7 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
 
     @Override
     public void destroy() {
+        // 如果销毁了，则返回
         if (isDestroyed()) {
             return;
         }
@@ -225,6 +226,7 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         // unregister.
         try {
             if (getRegisteredConsumerUrl() != null && registry != null && registry.isAvailable()) {
+                // 取消注册
                 registry.unregister(getRegisteredConsumerUrl());
             }
         } catch (Throwable t) {
@@ -233,6 +235,7 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         // unsubscribe.
         try {
             if (getConsumerUrl() != null && registry != null && registry.isAvailable()) {
+                // 取消订阅
                 registry.unsubscribe(getConsumerUrl(), this);
             }
             DynamicConfiguration.getDynamicConfiguration()
@@ -242,6 +245,7 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         }
         super.destroy(); // must be executed after unsubscribing
         try {
+            // 清空所有的invoker
             destroyAllInvokers();
         } catch (Throwable t) {
             logger.warn("Failed to destroy service " + serviceKey, t);
@@ -276,12 +280,15 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
 
         // providers 服务提供者信息
         List<URL> providerURLs = categoryUrls.getOrDefault(PROVIDERS_CATEGORY, Collections.emptyList());
+        // 刷新 invoker 列表
         refreshOverrideAndInvoker(providerURLs);
     }
 
     private void refreshOverrideAndInvoker(List<URL> urls) {
         // mock zookeeper://xxx?mock=return null
+        // 根据服务降级信息，重写 URL
         overrideDirectoryUrl();
+        // 刷新 invoker 列表
         refreshInvoker(urls);
     }
 
@@ -301,15 +308,18 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
     private void refreshInvoker(List<URL> invokerUrls) {
         Assert.notNull(invokerUrls, "invokerUrls should not be null");
 
+        // 只有一个服务提供者时
         if (invokerUrls.size() == 1
                 && invokerUrls.get(0) != null
                 && EMPTY_PROTOCOL.equals(invokerUrls.get(0).getProtocol())) {
             // 设置禁止访问
             this.forbidden = true; // Forbid to access
             this.invokers = Collections.emptyList();
+            // 设置路由规则
             routerChain.setInvokers(this.invokers);
+            // 关闭所有 invokers
             destroyAllInvokers(); // Close all invokers
-        } else {
+        } else { // 多个服务提供者时
             // 关闭禁止访问
             this.forbidden = false; // Allow to access
             // 引用老的 urlInvokerMap
@@ -366,6 +376,7 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
 
     private List<Invoker<T>> toMergeInvokerList(List<Invoker<T>> invokers) {
         List<Invoker<T>> mergedInvokers = new ArrayList<>();
+        // 获得组集合
         Map<String, List<Invoker<T>>> groupMap = new HashMap<>();
         for (Invoker<T> invoker : invokers) {
             String group = invoker.getUrl().getParameter(GROUP_KEY, "");
@@ -399,6 +410,7 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
 
         List<Router> routers = new ArrayList<>();
         for (URL url : urls) {
+            // 若url的protocol是”empty“，跳到下一次循环
             if (EMPTY_PROTOCOL.equals(url.getProtocol())) {
                 continue;
             }
@@ -569,18 +581,24 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
     }
 
     /**
+     * 关闭所有的invoker服务
+     *
      * Close all invokers
      */
     private void destroyAllInvokers() {
         Map<String, Invoker<T>> localUrlInvokerMap = this.urlInvokerMap; // local reference
+        // 如果invoker集合不为空
         if (localUrlInvokerMap != null) {
+            // 遍历
             for (Invoker<T> invoker : new ArrayList<>(localUrlInvokerMap.values())) {
                 try {
+                    // 销毁invoker
                     invoker.destroy();
                 } catch (Throwable t) {
                     logger.warn("Failed to destroy service " + serviceKey + " to provider " + invoker.getUrl(), t);
                 }
             }
+            // 清空集合
             localUrlInvokerMap.clear();
         }
         invokers = null;

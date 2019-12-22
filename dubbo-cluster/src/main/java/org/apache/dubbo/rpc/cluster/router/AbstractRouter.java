@@ -21,7 +21,13 @@ import org.apache.dubbo.configcenter.DynamicConfiguration;
 import org.apache.dubbo.rpc.cluster.Router;
 
 public abstract class AbstractRouter implements Router {
+    /**
+     * 路由规则的优先级，用于排序，优先级越大越靠前执行，可不填，缺省为 0 。
+     */
     protected int priority = DEFAULT_PRIORITY;
+    /**
+     * 是否强制执行
+     */
     protected boolean force = false;
     protected URL url;
 
