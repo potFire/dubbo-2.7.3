@@ -95,38 +95,52 @@ final public class MockInvoker<T> implements Invoker<T> {
 
     @Override
     public Result invoke(Invocation invocation) throws RpcException {
+        // mock类型
         String mock = getUrl().getParameter(invocation.getMethodName() + "." + MOCK_KEY);
         if (invocation instanceof RpcInvocation) {
             ((RpcInvocation) invocation).setInvoker(this);
         }
+        // 如果mock为空
         if (StringUtils.isBlank(mock)) {
+            // 获得mock值
             mock = getUrl().getParameter(MOCK_KEY);
         }
 
+        // 如果还是为空。则抛出异常
         if (StringUtils.isBlank(mock)) {
             throw new RpcException(new IllegalAccessException("mock can not be null. url :" + url));
         }
+        /// 格式化类型
         mock = normalizeMock(URL.decode(mock));
         if (mock.startsWith(RETURN_PREFIX)) {
+            // 等于 "return " ，返回值为空的 RpcResult 对象
             mock = mock.substring(RETURN_PREFIX.length()).trim();
             try {
+                // 分割
                 Type[] returnTypes = RpcUtils.getReturnTypes(invocation);
+                // 解析mock值
                 Object value = parseMockValue(mock, returnTypes);
                 return AsyncRpcResult.newDefaultAsyncResult(value, invocation);
             } catch (Exception ew) {
                 throw new RpcException("mock return invoke error. method :" + invocation.getMethodName()
                         + ", mock:" + mock + ", url: " + url, ew);
             }
+            // 如果是throw
         } else if (mock.startsWith(THROW_PREFIX)) {
+            // 根据throw分割
             mock = mock.substring(THROW_PREFIX.length()).trim();
+            // 如果为空，则抛出异常
             if (StringUtils.isBlank(mock)) {
                 throw new RpcException("mocked exception for service degradation.");
             } else { // user customized class
+                // 创建自定义异常
                 Throwable t = getThrowable(mock);
+                // 抛出业务类型的 RpcException 异常
                 throw new RpcException(RpcException.BIZ_EXCEPTION, t);
             }
         } else { //impl mock
             try {
+                // 否则直接获得invoker
                 Invoker<T> invoker = getInvoker(mock);
                 return invoker.invoke(invocation);
             } catch (Throwable t) {
@@ -158,15 +172,20 @@ final public class MockInvoker<T> implements Invoker<T> {
 
     @SuppressWarnings("unchecked")
     private Invoker<T> getInvoker(String mockService) {
+        // 从缓存中，获得 Invoker 对象，如果有，直接缓存。
         Invoker<T> invoker = (Invoker<T>) MOCK_MAP.get(mockService);
         if (invoker != null) {
             return invoker;
         }
 
+        // 获得接口类型
         Class<T> serviceType = (Class<T>) ReflectUtils.forName(url.getServiceInterface());
+        // 获得MockObject
         T mockObject = (T) getMockObject(mockService, serviceType);
+        // 创建invoker
         invoker = PROXY_FACTORY.getInvoker(mockObject, serviceType, url);
         if (MOCK_MAP.size() < 10000) {
+            // 加入集合
             MOCK_MAP.put(mockService, invoker);
         }
         return invoker;
@@ -174,16 +193,19 @@ final public class MockInvoker<T> implements Invoker<T> {
 
     @SuppressWarnings("unchecked")
     public static Object getMockObject(String mockService, Class serviceType) {
+        // 如果mock类型为true或者default，则设置接口名
         if (ConfigUtils.isDefault(mockService)) {
             mockService = serviceType.getName() + "Mock";
         }
 
+        // 反射加载字节码创建 Class 对象
         Class<?> mockClass = ReflectUtils.forName(mockService);
         if (!serviceType.isAssignableFrom(mockClass)) {
             throw new IllegalStateException("The mock class " + mockClass.getName() +
                     " not implement interface " + serviceType.getName());
         }
 
+        // 创建实例
         try {
             return mockClass.newInstance();
         } catch (InstantiationException e) {
