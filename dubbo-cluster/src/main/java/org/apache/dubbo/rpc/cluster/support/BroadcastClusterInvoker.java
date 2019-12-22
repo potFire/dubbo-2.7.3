@@ -29,6 +29,11 @@ import org.apache.dubbo.rpc.cluster.LoadBalance;
 import java.util.List;
 
 /**
+ * 广播调用：
+ * 当消费者调用一个接口方法后， Dubbo Client 会逐个调用所有服务提供者，
+ * 任意一个服务调用异常则这次调用就标志失败。
+ * 该类通常用于通知所有提供者更新缓存或日志等本地资源信息
+ *
  * BroadcastClusterInvoker
  *
  */
@@ -47,6 +52,7 @@ public class BroadcastClusterInvoker<T> extends AbstractClusterInvoker<T> {
         RpcContext.getContext().setInvokers((List) invokers);
         RpcException exception = null;
         Result result = null;
+        // 遍历 Invoker 列表，逐个调用
         for (Invoker<T> invoker : invokers) {
             try {
                 result = invoker.invoke(invocation);
@@ -58,6 +64,7 @@ public class BroadcastClusterInvoker<T> extends AbstractClusterInvoker<T> {
                 logger.warn(e.getMessage(), e);
             }
         }
+        // exception 不为空，则抛出异常
         if (exception != null) {
             throw exception;
         }

@@ -28,6 +28,10 @@ import org.apache.dubbo.rpc.cluster.LoadBalance;
 import java.util.List;
 
 /**
+ * 快速失败：
+ * 当服务消费者调用服务提供者失败后，立即报错，也就是只调用一次，
+ * 通常，这种模式用于非幂等的写操作
+ *
  * Execute exactly once, which means this policy will throw an exception immediately in case of an invocation error.
  * Usually used for non-idempotent write operations
  *
@@ -43,13 +47,17 @@ public class FailfastClusterInvoker<T> extends AbstractClusterInvoker<T> {
     @Override
     public Result doInvoke(Invocation invocation, List<Invoker<T>> invokers, LoadBalance loadbalance) throws RpcException {
         checkInvokers(invokers, invocation);
+        // 使用负载均衡策略选择一个服务提供者
         Invoker<T> invoker = select(loadbalance, invocation, invokers, null);
         try {
+            // 执行远程调用
             return invoker.invoke(invocation);
         } catch (Throwable e) {
+            // 抛出异常
             if (e instanceof RpcException && ((RpcException) e).isBiz()) { // biz exception.
                 throw (RpcException) e;
             }
+            // 抛出异常
             throw new RpcException(e instanceof RpcException ? ((RpcException) e).getCode() : 0,
                     "Failfast invoke providers " + invoker.getUrl() + " " + loadbalance.getClass().getSimpleName()
                             + " select from all providers " + invokers + " for service " + getInterface().getName()
